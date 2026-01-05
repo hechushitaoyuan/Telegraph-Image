@@ -1,5 +1,19 @@
 import { errorHandling, telemetryData } from "./utils/middleware";
 
+// 1. 定义跨域头：允许任何域名(*)访问，允许 POST 和 OPTIONS 方法
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// 2. 处理预检请求 (Browser Preflight)
+export const onRequestOptions = async () => {
+    return new Response(null, {
+        headers: corsHeaders,
+    });
+};
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 
@@ -63,20 +77,29 @@ export async function onRequestPost(context) {
             });
         }
 
+        // 3. 成功响应：加入 corsHeaders
         return new Response(
             JSON.stringify([{ 'src': `/file/${fileId}.${fileExtension}` }]),
             {
                 status: 200,
-                headers: { 'Content-Type': 'application/json' }
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...corsHeaders // 注入跨域头
+                }
             }
         );
     } catch (error) {
         console.error('Upload error:', error);
+        
+        // 4. 错误响应：也要加入 corsHeaders，否则前端连错误信息都读不到
         return new Response(
             JSON.stringify({ error: error.message }),
             {
                 status: 500,
-                headers: { 'Content-Type': 'application/json' }
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...corsHeaders // 注入跨域头
+                }
             }
         );
     }
@@ -128,7 +151,4 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
         if (retryCount < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
             return await sendToTelegram(formData, apiEndpoint, env, retryCount + 1);
-        }
-        return { success: false, error: 'Network error occurred' };
-    }
-}
+        
