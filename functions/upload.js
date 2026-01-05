@@ -1,13 +1,12 @@
 import { errorHandling, telemetryData } from "./utils/middleware";
 
-// 1. 定义跨域头：允许任何域名(*)访问，允许 POST 和 OPTIONS 方法
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// 2. 处理预检请求 (Browser Preflight)
+// Handle browser preflight requests
 export const onRequestOptions = async () => {
     return new Response(null, {
         headers: corsHeaders,
@@ -35,7 +34,6 @@ export async function onRequestPost(context) {
         const telegramFormData = new FormData();
         telegramFormData.append("chat_id", env.TG_Chat_ID);
 
-        // 根据文件类型选择合适的上传方式
         let apiEndpoint;
         if (uploadFile.type.startsWith('image/')) {
             telegramFormData.append("photo", uploadFile);
@@ -63,7 +61,6 @@ export async function onRequestPost(context) {
             throw new Error('Failed to get file ID');
         }
 
-        // 将文件信息保存到 KV 存储
         if (env.img_url) {
             await env.img_url.put(`${fileId}.${fileExtension}`, "", {
                 metadata: {
@@ -77,28 +74,25 @@ export async function onRequestPost(context) {
             });
         }
 
-        // 3. 成功响应：加入 corsHeaders
         return new Response(
             JSON.stringify([{ 'src': `/file/${fileId}.${fileExtension}` }]),
             {
                 status: 200,
                 headers: {
                     'Content-Type': 'application/json',
-                    ...corsHeaders // 注入跨域头
+                    ...corsHeaders
                 }
             }
         );
     } catch (error) {
         console.error('Upload error:', error);
-        
-        // 4. 错误响应：也要加入 corsHeaders，否则前端连错误信息都读不到
         return new Response(
             JSON.stringify({ error: error.message }),
             {
                 status: 500,
                 headers: {
                     'Content-Type': 'application/json',
-                    ...corsHeaders // 注入跨域头
+                    ...corsHeaders
                 }
             }
         );
@@ -133,7 +127,6 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
             return { success: true, data: responseData };
         }
 
-        // 图片上传失败时转为文档方式重试
         if (retryCount < MAX_RETRIES && apiEndpoint === 'sendPhoto') {
             console.log('Retrying image as document...');
             const newFormData = new FormData();
@@ -151,4 +144,8 @@ async function sendToTelegram(formData, apiEndpoint, env, retryCount = 0) {
         if (retryCount < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
             return await sendToTelegram(formData, apiEndpoint, env, retryCount + 1);
-        
+        }
+        return { success: false, error: 'Network error occurred' };
+    }
+}
+// --- END OF FILE ---
